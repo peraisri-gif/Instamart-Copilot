@@ -177,3 +177,18 @@ For this refund workflow I would choose ReAct. The next step depends on what eac
 - Replace TF-IDF with embedding-based retrieval and add a re-ranking step.
 - Add more ticket categories and a confidence threshold that sends uncertain tickets to human review.
 - Add unit tests for the refund rules and a human-approval step before large refunds are issued.
+
+## Reproduce
+1. `python3 -m venv .venv`
+2. `source .venv/bin/activate`
+3. `pip install -r requirements.txt`
+4. `python generate_data.py` (last line: `generated: customers=1200 products=40 orders_raw=13084 tickets=164`)
+5. `python data_pipeline.py` (cleans the data, writes `data/clean/*.csv` and `data/instamart.db`)
+6. `python validate.py` (prints `ALL CHECKPOINTS PASSED`)
+7. `python run_queries.py` (the seven queries in `sql/queries.sql`)
+8. `python analysis.py` (pivot table and exploratory analysis)
+9. `python part_b.py` (RFM, K-means, segments, PCA, writes `outputs/customer_segments.csv`)
+10. `python lapse_model.py` (lapse model, writes `outputs/lapse_model.joblib` and `outputs/retention_list.csv`)
+11. `python triage.py` (ticket triage, writes `outputs/triage_budget_demo.csv` and `outputs/triage_results.csv`)
+12. `python rag.py` (policy chunking, retrieval and evaluation)
+13. `python agent.py` (refund agent, writes `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl` and `state/`)
