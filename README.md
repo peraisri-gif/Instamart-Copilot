@@ -117,22 +117,6 @@ The few-shot prompt costs about 89 extra tokens per ticket (148.8 vs 59.7, about
 - Final run: few-shot with TOKEN_BUDGET = 100000, routing from outputs/triage_results.csv (164 rows): security_team 34 (fraud, HIGH), premium_desk 11 (premium customers, HIGH), support_queue 102 (NORMAL), human_review 17 (NORMAL).
 - Rule-validated and routed automatically: 147 tickets (135 JSON + 12 keyword). Sent to humans: 17 tickets (4 empty, 4 too long, 9 invalid output).
 ## Part D
-## Limitations and Next Steps
-
-### Limitations
-- **Premium flag is a post-hoc label.** The Premium segment comes from whole-window RFM (task 3), which includes the September window that defines the lapse label. The retention list (3 of the top 10 customers truly lapsed) is therefore illustrative and not a leakage-free evaluation. The model's own features use only orders before 2025-09-01.
-- **Small test set.** The lapse model is judged on 232 customers, so test F1 (0.648) can move by several points with another split. Oversampling duplicates lapsed training rows, so it adds no new information.
-- **Synthetic data and a mock model.** All data is generated, and every language-model call goes through the offline `mock_llm.py`. The 100% few-shot accuracy and the 85.7% zero-shot accuracy describe that mock, not a real model.
-- **TF-IDF retrieval.** It matches exact words only, so paraphrases (for example "money back" for "refund") can be missed, and a fact split across a chunk boundary can be lost (seen with overlap 0).
-- **Token counts are estimates** from `est_tokens`, not from a real tokenizer.
-- **Refund agent.** It handles one order per message and treats every request as raised inside the 7-day window.
-
-### Next Steps
-- Compute the Premium flag from orders before the cutoff only, and re-evaluate the retention list without leakage.
-- Use time-based validation (train on earlier months, test on later ones) and calibrate the predicted lapse probabilities.
-- Replace TF-IDF with embedding-based retrieval and add a re-ranking step.
-- Add more ticket categories and a confidence threshold that sends uncertain tickets to human review.
-- Add unit tests for the refund rules and a human-approval step before large refunds are issued.
 ### Chunking and retrieval
 - Chunks of 40 words with overlap 10 (stride 30): 15 chunks in total (refund 4, delivery 3, escalation 3, payment 3, privacy 2).
 - Retriever: TfidfVectorizer fitted on the chunk texts, cosine similarity, top k=3. For "refund policy late delivery" all three chunks come from refund_policy.txt.
@@ -177,3 +161,19 @@ My ReAct agent asks the model what to do after every observation. This costs one
 The difference shows up when an observation is unexpected. In S6 the order id does not exist, and in S5 the order was cancelled. ReAct reads the NOT_FOUND or the cancelled status straight away and stops after 2 or 3 calls. A fixed plan would carry on with the policy search and the refund calculation for an order that cannot be refunded, and it would only recover if a replan is triggered.
 
 For this refund workflow I would choose ReAct. The next step depends on what each tool returns (the order status, the delivery time, and whether the amount is above INR 1,000), and a wrong step can move money. The extra cost is a few hundred tokens per ticket, which is small compared to the risk of issuing a wrong refund.
+# Limitations and Next Steps
+
+### Limitations
+- **Premium flag is a post-hoc label.** The Premium segment comes from whole-window RFM (task 3), which includes the September window that defines the lapse label. The retention list (3 of the top 10 customers truly lapsed) is therefore illustrative and not a leakage-free evaluation. The model's own features use only orders before 2025-09-01.
+- **Small test set.** The lapse model is judged on 232 customers, so test F1 (0.648) can move by several points with another split. Oversampling duplicates lapsed training rows, so it adds no new information.
+- **Synthetic data and a mock model.** All data is generated, and every language-model call goes through the offline `mock_llm.py`. The 100% few-shot accuracy and the 85.7% zero-shot accuracy describe that mock, not a real model.
+- **TF-IDF retrieval.** It matches exact words only, so paraphrases (for example "money back" for "refund") can be missed, and a fact split across a chunk boundary can be lost (seen with overlap 0).
+- **Token counts are estimates** from `est_tokens`, not from a real tokenizer.
+- **Refund agent.** It handles one order per message and treats every request as raised inside the 7-day window.
+
+### Next Steps
+- Compute the Premium flag from orders before the cutoff only, and re-evaluate the retention list without leakage.
+- Use time-based validation (train on earlier months, test on later ones) and calibrate the predicted lapse probabilities.
+- Replace TF-IDF with embedding-based retrieval and add a re-ranking step.
+- Add more ticket categories and a confidence threshold that sends uncertain tickets to human review.
+- Add unit tests for the refund rules and a human-approval step before large refunds are issued.
