@@ -6,14 +6,19 @@ predict lapse (Part B), triage support tickets (Part C), policy RAG assistant
 and refund agent (Part D). All data is fictional; all money is in INR.
 
 ## Reproduce
-1. `python -m venv .venv`
+1. `python3 -m venv .venv`
 2. `source .venv/bin/activate`
 3. `pip install -r requirements.txt`
-4. `python generate_data.py`
-5. `python data_pipeline.py`
-6. `python validate.py`
-7. `python run_queries.py`
-8. `python analysis.py`
+4. `python generate_data.py` (last line: `generated: customers=1200 products=40 orders_raw=13084 tickets=164`)
+5. `python data_pipeline.py` (cleans the data, writes `data/clean/*.csv` and `data/instamart.db`)
+6. `python validate.py` (prints `ALL CHECKPOINTS PASSED`)
+7. `python run_queries.py` (the seven queries in `sql/queries.sql`)
+8. `python analysis.py` (pivot table and exploratory analysis)
+9. `python part_b.py` (RFM, K-means, segments, PCA, writes `outputs/customer_segments.csv`)
+10. `python lapse_model.py` (lapse model, writes `outputs/lapse_model.joblib` and `outputs/retention_list.csv`)
+11. `python triage.py` (ticket triage, writes `outputs/triage_budget_demo.csv` and `outputs/triage_results.csv`)
+12. `python rag.py` (policy chunking, retrieval and evaluation)
+13. `python agent.py` (refund agent, writes `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl` and `state/`)
 
 ## Part A
 
@@ -92,6 +97,12 @@ No encoder, scaler or resampler saw test rows; no data from 2025-09-01 onwards e
 ### Limitations and Next Steps
 The Premium flag comes from whole-window RFM, which includes the September window that defines the label, so it is a post-hoc whole-window label and the retention list is illustrative, not a leakage-free evaluation.
 
+### Leakage check and top features
+- Scaler mean of frequency (fit on train only): 8.115
+- Full cohort mean of frequency: 8.029
+- The two means differ, so the scaler was fit on the training split only (no leakage).
+- Top 5 Random Forest features: frequency 0.290, monetary 0.250,recency 0.121,avg_discount 0.060,cancel_rate 0.058
+
 ## Part C
 
 ### Guardrails and redaction
@@ -155,13 +166,13 @@ All seven match the expected outcome and refund within INR 0.01. With the defaul
 A checkpoint (run id, scenario id, full message list, tokens used, step number, tools executed) is written to `state/<run_id>.json` after every tool observation. For S1 I raised a simulated crash right after the second tool's checkpoint, then called `resume_agent`. The final status was REFUND with INR 128.25, and the tools executed across the crash and the resume were, in order: `get_order`, `search_policy`, `calculate_refund`, `issue_refund` (four executions, none repeated).
 
 ### ReAct versus plan-and-execute
-WRITE YOUR OWN COMPARISON HERE (max 250 words).
-My ReAct agent asks the model what to do after every observation. This costs one model call per step: S1 needed 5 calls and 1,122 tokens, S5 needed 3 calls and 472 tokens, and S6 needed only 2 calls and 162 tokens. A plan-and-execute design would ask the model for the whole step list once and then run the tools without the model, replanning only on an error. For the same refund it would need roughly 2 model calls (one for the plan, one for the final answer), so it would use fewer calls and fewer tokens than ReAct.
+
+My ReAct agent asks the model what to do after every observation. This costs one model call per step: S1 needed 5 calls and 1,122 tokens, S5 needed 3 calls and 472 tokens, and S6 needed only 2 calls and 162 tokens. A plan-and-execute design would ask the model for the whole step list once and then run the tools without the model, replanning only on an error. For the same refund it would need roughly 2 model calls (one for the plan, one for the final answer), so it would use fewer calls and fewer tokens than ReAct
 
 The difference shows up when an observation is unexpected. In S6 the order id does not exist, and in S5 the order was cancelled. ReAct reads the NOT_FOUND or the cancelled status straight away and stops after 2 or 3 calls. A fixed plan would carry on with the policy search and the refund calculation for an order that cannot be refunded, and it would only recover if a replan is triggered.
 
 For this refund workflow I would choose ReAct. The next step depends on what each tool returns (the order status, the delivery time, and whether the amount is above INR 1,000), and a wrong step can move money. The extra cost is a few hundred tokens per ticket, which is small compared to the risk of issuing a wrong refund.
-# Limitations and Next Steps
+## Limitations and Next Steps
 
 ### Limitations
 - **Premium flag is a post-hoc label.** The Premium segment comes from whole-window RFM (task 3), which includes the September window that defines the lapse label. The retention list (3 of the top 10 customers truly lapsed) is therefore illustrative and not a leakage-free evaluation. The model's own features use only orders before 2025-09-01.
@@ -178,17 +189,3 @@ For this refund workflow I would choose ReAct. The next step depends on what eac
 - Add more ticket categories and a confidence threshold that sends uncertain tickets to human review.
 - Add unit tests for the refund rules and a human-approval step before large refunds are issued.
 
-## Reproduce
-1. `python3 -m venv .venv`
-2. `source .venv/bin/activate`
-3. `pip install -r requirements.txt`
-4. `python generate_data.py` (last line: `generated: customers=1200 products=40 orders_raw=13084 tickets=164`)
-5. `python data_pipeline.py` (cleans the data, writes `data/clean/*.csv` and `data/instamart.db`)
-6. `python validate.py` (prints `ALL CHECKPOINTS PASSED`)
-7. `python run_queries.py` (the seven queries in `sql/queries.sql`)
-8. `python analysis.py` (pivot table and exploratory analysis)
-9. `python part_b.py` (RFM, K-means, segments, PCA, writes `outputs/customer_segments.csv`)
-10. `python lapse_model.py` (lapse model, writes `outputs/lapse_model.joblib` and `outputs/retention_list.csv`)
-11. `python triage.py` (ticket triage, writes `outputs/triage_budget_demo.csv` and `outputs/triage_results.csv`)
-12. `python rag.py` (policy chunking, retrieval and evaluation)
-13. `python agent.py` (refund agent, writes `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl` and `state/`)
