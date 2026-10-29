@@ -91,3 +91,28 @@ No encoder, scaler or resampler saw test rows; no data from 2025-09-01 onwards e
 
 ### Limitations and Next Steps
 The Premium flag comes from whole-window RFM, which includes the September window that defines the label, so it is a post-hoc whole-window label and the retention list is illustrative, not a leakage-free evaluation.
+
+## Part C
+
+### Guardrails and redaction
+- Input guardrails run before any model call: 4 empty tickets get `skipped_empty`, 4 tickets above MAX_INPUT_TOKENS = 400 (734 estimated tokens each) get `flagged_long`. None of them is sent to the model.
+- PII redaction (email, then phone, then order id): 55 emails, 91 phones, 132 order ids, 278 substitutions in total. Re-applying the patterns finds 0 left. An assertion checks every prompt before each call.
+
+### Retries and validation
+- Every model call is wrapped in a retry function: max 3 retries, wait = 0.05 x 2^n x uniform(0.9, 1.15). A full run has 19 TransientLLMError; every one was retry number 0, so each wait is between 0.045 and 0.0575 s, and all 19 recovered. No ticket ended with a permanent error.
+- Reply validation, full run over 156 eligible tickets: 135 classified_json, 12 classified_keyword (extracted with `re.findall`), 9 flagged_invalid_output (sent to human review, never guessed).
+
+### Zero-shot vs few-shot
+| Prompt | Classified | Correct | Accuracy | Total tokens | Tokens per ticket |
+|---|---|---|---|---|---|
+| Zero-shot | 147 | 126 | 85.7% | 8,776 | 59.7 |
+| Few-shot | 147 | 147 | 100% | 21,880 | 148.8 |
+
+Zero-shot confusion table: billing 38/38, delivery 36/36, fraud 23 correct with 11 predicted as billing, technical 29 correct with 10 predicted as billing. Every error is a fraud or technical ticket predicted as billing.
+
+The few-shot prompt costs about 89 extra tokens per ticket (148.8 vs 59.7, about 2.5x in total) but fixes all 21 errors. Wrongly routing a fraud ticket is expensive (account takeover goes unnoticed), so the extra cost is worth paying. For cheap, low-risk categories zero-shot would be enough.
+
+### Budget and routing
+- With TOKEN_BUDGET = 6000 (zero-shot), 49 tickets end as `budget_exhausted` (outputs/triage_budget_demo.csv).
+- Final run: few-shot with TOKEN_BUDGET = 100000, routing from outputs/triage_results.csv (164 rows): security_team 34 (fraud, HIGH), premium_desk 11 (premium customers, HIGH), support_queue 102 (NORMAL), human_review 17 (NORMAL).
+- Rule-validated and routed automatically: 147 tickets (135 JSON + 12 keyword). Sent to humans: 17 tickets (4 empty, 4 too long, 9 invalid output).
