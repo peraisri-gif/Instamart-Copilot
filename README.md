@@ -82,7 +82,7 @@ Segment ids are only labels with no ordering. PCA (2 components) explains 0.634 
 - Cutoff 2025-09-01. Cohort 1,156 customers, 443 lapsed (38.32%). Train 924, test 232. Baseline "never lapses": accuracy 61.6%, F1 0.
 - Logistic regression (best C=100): CV F1 0.651, test F1 0.648, recall 0.652. Random forest (depth 8, leaf 10): CV F1 0.693, test F1 0.633.
 - **Selected: logistic regression.** Missing a lapsing customer costs a lost customer, while wrongly targeting a loyal one only costs a small discount, so recall matters most. It has the higher test F1 and recall and is easy to explain.
-- Oversampling (training set only, 570 per class): <FILL in recall/precision/F1 from your run>.
+- - Oversampling (training set only, 570 per class, random_state=42): on the untouched test set, recall rose from 0.652 to 0.854, precision fell from 0.644 to 0.589, and F1 rose from 0.648 to 0.697. Recall moved the most. For the retention team this means the balanced model catches many more customers who are about to lapse, at the price of more wrongly targeted loyal customers, which only costs a small discount.
 - Key coefficients: frequency -1.698 (frequent buyers rarely lapse), recency +0.040, cancel_rate -0.124 (weak).
 - Retention list: top 10 Premium test customers by lapse probability, 3 of 10 truly lapsed.
 
