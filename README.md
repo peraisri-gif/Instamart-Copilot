@@ -59,3 +59,35 @@ The order amounts are heavily skewed to the right. The median order is just INR 
 There are plenty of outliers: 897 orders are above the upper fence of INR 645.30, and none are below the lower one. I think these are real purchases of pricier items like electronics rather than mistakes, so I kept them.
 
 The relationships are all weak. The strongest is order amount against discount percentage at -0.095, then order amount against quantity at +0.087. Delivery time barely relates to anything. Even the strongest correlation is small, and correlation alone does not prove one thing causes the other.
+
+
+## Part B
+
+### RFM and K-means
+- RFM table: 1,175 customers; snapshot 2025-10-01; recency median 19 (0-180), frequency mean 9.46 (max 33), monetary mean INR 2,552.06 (max INR 14,766.55).
+- K-means (StandardScaler, n_init=10, random_state=42), inertia / silhouette: K=2 1820.8 / 0.465, K=3 1268.2 / 0.445, K=4 743.1 / 0.526, K=5 617.4 / 0.481, K=6 503.2 / 0.482, K=7 408.5 / 0.416, K=8 366.5 / 0.412.
+- I chose K=4: it has the highest silhouette, the elbow flattens after it, and four groups are easy for the business to act on. Inertia always falls as K grows (K=8 is lower than K=2), so inertia alone cannot pick K.
+
+### Segments
+| Name | Size | Recency | Frequency | Monetary | Action |
+|---|---|---|---|---|---|
+| Premium High Spenders | 138 | 24.12 | 6.77 | 7,129.70 | early access, premium perks |
+| Loyal Frequent Buyers | 419 | 8.77 | 19.40 | 3,410.02 | loyalty rewards |
+| Occasional Buyers | 436 | 28.86 | 3.77 | 1,057.62 | bundle offers |
+| Lapsing Low Activity | 182 | 109.04 | 2.20 | 685.99 | win-back discount |
+
+Segment ids are only labels with no ordering. PCA (2 components) explains 0.634 + 0.218 = 0.852 of the variance.
+
+### Lapse prediction
+- Cutoff 2025-09-01. Cohort 1,156 customers, 443 lapsed (38.32%). Train 924, test 232. Baseline "never lapses": accuracy 61.6%, F1 0.
+- Logistic regression (best C=100): CV F1 0.651, test F1 0.648, recall 0.652. Random forest (depth 8, leaf 10): CV F1 0.693, test F1 0.633.
+- **Selected: logistic regression.** Missing a lapsing customer costs a lost customer, while wrongly targeting a loyal one only costs a small discount, so recall matters most. It has the higher test F1 and recall and is easy to explain.
+- Oversampling (training set only, 570 per class): <FILL in recall/precision/F1 from your run>.
+- Key coefficients: frequency -1.698 (frequent buyers rarely lapse), recency +0.040, cancel_rate -0.124 (weak).
+- Retention list: top 10 Premium test customers by lapse probability, 3 of 10 truly lapsed.
+
+### No leakage
+No encoder, scaler or resampler saw test rows; no data from 2025-09-01 onwards entered the features; segment labels from task 3 were not used as features.
+
+### Limitations and Next Steps
+The Premium flag comes from whole-window RFM, which includes the September window that defines the label, so it is a post-hoc whole-window label and the retention list is illustrative, not a leakage-free evaluation.
