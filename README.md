@@ -131,3 +131,34 @@ The few-shot prompt costs about 89 extra tokens per ticket (148.8 vs 59.7, about
 
 With overlap 0 two questions fail ("What delivery time makes a completed order eligible for a full refund?" and "How soon is money returned when a payment fails but is deducted?"). The fact was split across a chunk boundary, so neither chunk held the whole sentence even though the right document was retrieved. Overlap 10 keeps the boundary words in both chunks.
 The fallback answer is the one that begins "I could not find".
+### Tools and ReAct agent
+- Five tools (`get_order`, `search_policy`, `calculate_refund`, `issue_refund`, `escalate_to_human`) are defined in `TOOLS_SPEC` and looked up through `TOOL_MAP`. `issue_refund` and `escalate_to_human` append one JSON line to `outputs/refund_ledger.jsonl` and never write the same order twice, so a resumed run cannot refund twice.
+- Refund rules: only completed orders; delivery over 45 minutes gives 100% of order_amount, 45 minutes or less gives 0; a refund above INR 1,000 is escalated.
+
+| Scenario | Status | Refund (INR) | Model calls | Tokens used |
+|---|---|---|---|---|
+| S1 | REFUND | 128.25 | 5 | 1,122 |
+| S2 | REFUND | 135.00 | 5 | 1,122 |
+| S3 | ESCALATE | 1,999.00 | 5 | 1,109 |
+| S4 | DENIED | 0 | 4 | 785 |
+| S5 | DENIED | 0 | 3 | 472 |
+| S6 | NOT_FOUND | 0 | 2 | 162 |
+| S7 | FALLBACK_MAX_ITERATIONS | 0 | 6 | 3,270 |
+
+All seven match the expected outcome and refund within INR 0.01. With the default `token_limit=6000`, S7 finishes all six model calls and stops with FALLBACK_MAX_ITERATIONS.
+
+### Safe stopping
+- Max iterations: after 6 model calls without a final answer the run stops (S7).
+- Token limit: with S1 and `token_limit=200` the run ended with **FALLBACK_TOKEN_LIMIT** after 3 model calls, before executing the tool that was just requested.
+- Time limit: with S1 and `time_limit_seconds=0` the run ended with **FALLBACK_TIMEOUT** before the first model call (0 calls). Every fallback returns the steps completed so far and a short human-handoff message in `final_answer`.
+
+### Resumable runs
+A checkpoint (run id, scenario id, full message list, tokens used, step number, tools executed) is written to `state/<run_id>.json` after every tool observation. For S1 I raised a simulated crash right after the second tool's checkpoint, then called `resume_agent`. The final status was REFUND with INR 128.25, and the tools executed across the crash and the resume were, in order: `get_order`, `search_policy`, `calculate_refund`, `issue_refund` (four executions, none repeated).
+
+### ReAct versus plan-and-execute
+WRITE YOUR OWN COMPARISON HERE (max 250 words).
+My ReAct agent asks the model what to do after every observation. This costs one model call per step: S1 needed 5 calls and 1,122 tokens, S5 needed 3 calls and 472 tokens, and S6 needed only 2 calls and 162 tokens. A plan-and-execute design would ask the model for the whole step list once and then run the tools without the model, replanning only on an error. For the same refund it would need roughly 2 model calls (one for the plan, one for the final answer), so it would use fewer calls and fewer tokens than ReAct.
+
+The difference shows up when an observation is unexpected. In S6 the order id does not exist, and in S5 the order was cancelled. ReAct reads the NOT_FOUND or the cancelled status straight away and stops after 2 or 3 calls. A fixed plan would carry on with the policy search and the refund calculation for an order that cannot be refunded, and it would only recover if a replan is triggered.
+
+For this refund workflow I would choose ReAct. The next step depends on what each tool returns (the order status, the delivery time, and whether the amount is above INR 1,000), and a wrong step can move money. The extra cost is a few hundred tokens per ticket, which is small compared to the risk of issuing a wrong refund.
