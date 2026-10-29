@@ -116,3 +116,18 @@ The few-shot prompt costs about 89 extra tokens per ticket (148.8 vs 59.7, about
 - With TOKEN_BUDGET = 6000 (zero-shot), 49 tickets end as `budget_exhausted` (outputs/triage_budget_demo.csv).
 - Final run: few-shot with TOKEN_BUDGET = 100000, routing from outputs/triage_results.csv (164 rows): security_team 34 (fraud, HIGH), premium_desk 11 (premium customers, HIGH), support_queue 102 (NORMAL), human_review 17 (NORMAL).
 - Rule-validated and routed automatically: 147 tickets (135 JSON + 12 keyword). Sent to humans: 17 tickets (4 empty, 4 too long, 9 invalid output).
+## Part D
+
+### Chunking and retrieval
+- Chunks of 40 words with overlap 10 (stride 30): 15 chunks in total (refund 4, delivery 3, escalation 3, payment 3, privacy 2).
+- Retriever: TfidfVectorizer fitted on the chunk texts, cosine similarity, top k=3. For "refund policy late delivery" all three chunks come from refund_policy.txt.
+- TF measures how often a word appears in a chunk; IDF gives more weight to words that are rare across all chunks. One limitation: two phrasings with the same meaning but different words (for example "money back" and "refund") do not match, because TF-IDF only compares exact words.
+
+### Evaluation (policy_eval.csv: 12 answerable, 2 unanswerable)
+| Overlap | Chunks | Right source in top 3 | Expected fact in answer | Fallback on unanswerable |
+|---|---|---|---|---|
+| 10 | 15 | 12/12 | 12/12 | 2/2 |
+| 0 | 13 | 12/12 | 10/12 | 2/2 |
+
+With overlap 0 two questions fail ("What delivery time makes a completed order eligible for a full refund?" and "How soon is money returned when a payment fails but is deducted?"). The fact was split across a chunk boundary, so neither chunk held the whole sentence even though the right document was retrieved. Overlap 10 keeps the boundary words in both chunks.
+The fallback answer is the one that begins "I could not find".
