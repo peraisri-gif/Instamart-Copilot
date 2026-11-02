@@ -20,6 +20,8 @@ and refund agent (Part D). All data is fictional; all money is in INR.
 12. `python rag.py` (policy chunking, retrieval and evaluation)
 13. `python agent.py` (refund agent, writes `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl` and `state/`)
 
+To run every step in order with one command: `python run_project.py`
+
 ## Part A
 
 ### Audit of raw data
